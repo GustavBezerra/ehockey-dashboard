@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, ReferenceLine, Area, AreaChart } from "recharts";
 
-const API = "http://localhost:8000";
+const API = "https://web-production-fd2a9.up.railway.app";
 
 // ═══════════════════════════════════════════════════════════════
 // HOOKS

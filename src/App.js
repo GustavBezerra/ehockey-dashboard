@@ -410,6 +410,18 @@ export default function App() {
   const [predOddsU75,setPredOddsU75]=useState("");
   const predFetch=useFetch();
 
+  // Live predict inputs
+  const [liveScoreP1,setLiveScoreP1]=useState("");
+  const [liveScoreP2,setLiveScoreP2]=useState("");
+  const [livePeriod,setLivePeriod]=useState("3");
+  const [liveStage,setLiveStage]=useState("group");
+  const [liveTournWins1,setLiveTournWins1]=useState("");
+  const [liveTournWins2,setLiveTournWins2]=useState("");
+  const [liveOddsLine,setLiveOddsLine]=useState("");
+  const [liveOddsOver,setLiveOddsOver]=useState("");
+  const [liveOddsUnder,setLiveOddsUnder]=useState("");
+  const liveFetch=useFetch();
+
   // Time patterns
   const tp1=useFetch();
   const tp2=useFetch();
@@ -1171,6 +1183,152 @@ export default function App() {
                     </>)}
 
                     {!pred&&!loading&&(<Card><div style={{textAlign:"center",padding:30,color:T.textMuted}}>Selecione dois jogadores e clique "Calcular Predição"</div></Card>)}
+
+                    {/* ═══ LIVE PREDICTION ═══ */}
+                    <div style={{marginTop:32}}/>
+                    <SectionTitle icon="🔴">Predição AO VIVO</SectionTitle>
+                    <Card style={{marginBottom:16}}>
+                      <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Insira o placar atual e o período pra calcular gols restantes e O/U ao vivo.</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
+                        <InputField label={`Gols ${p1}`} value={liveScoreP1} onChange={setLiveScoreP1} placeholder="0"/>
+                        <InputField label={`Gols ${p2}`} value={liveScoreP2} onChange={setLiveScoreP2} placeholder="0"/>
+                        <div>
+                          <label style={{fontSize:11,fontWeight:600,color:T.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6,display:"block"}}>Entrando no</label>
+                          <select value={livePeriod} onChange={e=>setLivePeriod(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",color:T.text,fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:600,outline:"none",width:"100%"}}>
+                            <option value="2">P2</option><option value="3">P3</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{fontSize:11,fontWeight:600,color:T.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6,display:"block"}}>Fase</label>
+                          <select value={liveStage} onChange={e=>setLiveStage(e.target.value)} style={{background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",color:T.text,fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:600,outline:"none",width:"100%"}}>
+                            <option value="group">Group Stage</option><option value="semi">Semifinal</option><option value="third">3º Lugar</option><option value="final">Final</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:10,marginBottom:12}}>
+                        <InputField label={`Wins ${p1} torneio`} value={liveTournWins1} onChange={setLiveTournWins1} placeholder="0"/>
+                        <InputField label={`Wins ${p2} torneio`} value={liveTournWins2} onChange={setLiveTournWins2} placeholder="0"/>
+                        <InputField label="Linha O/U" value={liveOddsLine} onChange={setLiveOddsLine} placeholder="6.5"/>
+                        <InputField label="Odd Over" value={liveOddsOver} onChange={setLiveOddsOver} placeholder="1.85"/>
+                        <InputField label="Odd Under" value={liveOddsUnder} onChange={setLiveOddsUnder} placeholder="1.95"/>
+                      </div>
+                      <button onClick={()=>{
+                        let url=`/predict-live?p1=${encodeURIComponent(p1)}&p2=${encodeURIComponent(p2)}&current_period=${livePeriod}&score_p1=${liveScoreP1||0}&score_p2=${liveScoreP2||0}`;
+                        if(liveStage)url+=`&stage=${liveStage}`;
+                        if(liveTournWins1)url+=`&tournament_wins_p1=${liveTournWins1}`;
+                        if(liveTournWins2)url+=`&tournament_wins_p2=${liveTournWins2}`;
+                        if(liveOddsLine)url+=`&odds_line=${liveOddsLine}`;
+                        if(liveOddsOver)url+=`&odds_over=${liveOddsOver}`;
+                        if(liveOddsUnder)url+=`&odds_under=${liveOddsUnder}`;
+                        liveFetch.load(url);
+                      }} style={{background:`linear-gradient(135deg, ${T.red}, ${T.purple})`,color:"#fff",border:"none",borderRadius:10,padding:"12px 32px",fontFamily:"'Outfit'",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%"}}>
+                        {liveFetch.loading?"Calculando...":"🔴 Calcular Live"}
+                      </button>
+                    </Card>
+
+                    {liveFetch.data&&(()=>{
+                      const lv=liveFetch.data;
+                      return(<>
+                        {/* Live header */}
+                        <Card style={{marginBottom:16,background:`${T.red}08`,border:`1px solid ${T.red}20`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                            <div>
+                              <span style={{fontSize:16,fontWeight:800,color:T.text}}>🔴 {lv.current_score}</span>
+                              <span style={{fontSize:12,color:T.textMuted,marginLeft:8}}>Entrando no P{lv.current_period}</span>
+                              {lv.conference&&<span style={{fontSize:12,color:T.textDim,marginLeft:8}}>| {lv.conference}</span>}
+                              {lv.stage&&<span style={{fontSize:12,color:T.textDim,marginLeft:8}}>| {lv.stage}</span>}
+                            </div>
+                            <div style={{textAlign:"right"}}>
+                              <div style={{fontSize:11,color:T.textDim}}>Gols restantes esperados</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:28,fontWeight:800,color:T.cyan}}>{lv.expected_remaining_goals}</div>
+                            </div>
+                          </div>
+                          <div style={{display:"flex",gap:16,marginTop:12}}>
+                            <div style={{flex:1,textAlign:"center",padding:8,background:"rgba(255,255,255,0.04)",borderRadius:8}}>
+                              <div style={{fontSize:10,color:T.textDim}}>Total atual</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800}}>{lv.current_total}</div>
+                            </div>
+                            <div style={{flex:1,textAlign:"center",padding:8,background:`${T.cyan}10`,borderRadius:8}}>
+                              <div style={{fontSize:10,color:T.textDim}}>Total final esperado</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:T.cyan}}>{lv.expected_final_total}</div>
+                            </div>
+                            <div style={{flex:1,textAlign:"center",padding:8,background:"rgba(255,255,255,0.04)",borderRadius:8}}>
+                              <div style={{fontSize:10,color:T.textDim}}>Períodos restantes</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800}}>{lv.periods_remaining}</div>
+                            </div>
+                          </div>
+                        </Card>
+
+                        {/* Reaction warning */}
+                        {lv.reaction&&(<Card style={{marginBottom:12,padding:"10px 16px",background:lv.reaction.type==="DESISTE"?`${T.red}08`:lv.reaction.type==="REAGE"?`${T.green}08`:"transparent",border:`1px solid ${lv.reaction.type==="DESISTE"?T.red:lv.reaction.type==="REAGE"?T.green:T.border}20`}}>
+                          <span style={{fontSize:13,fontWeight:700,color:lv.reaction.type==="DESISTE"?T.red:lv.reaction.type==="REAGE"?T.green:T.yellow}}>
+                            {lv.reaction.type==="DESISTE"?"🥶":"🔥"} {lv.reaction.player} {lv.reaction.type} quando está perdendo
+                          </span>
+                          <span style={{fontSize:12,color:T.textMuted,marginLeft:8}}>P3 avg: {lv.reaction.avg_p3_gf_when_losing} gf ({lv.reaction.games} jogos)</span>
+                        </Card>)}
+
+                        {/* Troll warning */}
+                        {lv.troll&&(<Card style={{marginBottom:12,padding:"10px 16px",background:`${T.yellow}08`,border:`1px solid ${T.yellow}20`}}>
+                          <span style={{fontSize:13}}>🎭 {lv.troll.warning}</span>
+                        </Card>)}
+
+                        {/* O/U Live table */}
+                        <SectionTitle icon="📊">Over/Under ao Vivo</SectionTitle>
+                        <Card style={{marginBottom:16}}>
+                          <table style={{width:"100%",borderCollapse:"collapse"}}>
+                            <thead><tr>
+                              {["Linha","Precisa","Lado","Over%","Under%","Fair O","Fair U","EV Over","EV Under"].map((h,i)=><th key={i} style={{textAlign:i<3?"left":"right",padding:"8px 5px",fontSize:10,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMuted,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+                            </tr></thead>
+                            <tbody>
+                              {lv.over_under.map((ou,i)=>(
+                                <tr key={i} style={{borderBottom:`1px solid rgba(255,255,255,0.04)`,background:ou.ev_over>0||ou.ev_under>0?`${T.green}06`:"transparent"}}>
+                                  <td style={{padding:"8px 5px",fontWeight:700,fontSize:13}}>O/U {ou.line}</td>
+                                  <td style={{padding:"8px 5px",fontFamily:"'JetBrains Mono'",fontSize:12,color:T.textMuted}}>{ou.goals_needed}+ gols</td>
+                                  <td style={{padding:"8px 5px",fontWeight:700,fontSize:12,color:ou.side==="OVER"?T.green:ou.side==="UNDER"?T.red:T.yellow}}>{ou.side}</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.prob_over>60?T.green:T.textMuted}}>{ou.prob_over}%</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.prob_under>60?T.green:T.textMuted}}>{ou.prob_under}%</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:11,color:T.text}}>@ {ou.fair_over}</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:11,color:T.text}}>@ {ou.fair_under}</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,fontSize:12,color:ou.ev_over!=null?(ou.ev_over>0?T.green:T.red):T.textDim}}>{ou.ev_over!=null?`${ou.ev_over>0?"+":""}${ou.ev_over}%`:"—"}{ou.kelly_over>0?` K:${ou.kelly_over}%`:""}</td>
+                                  <td style={{padding:"8px 5px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,fontSize:12,color:ou.ev_under!=null?(ou.ev_under>0?T.green:T.red):T.textDim}}>{ou.ev_under!=null?`${ou.ev_under>0?"+":""}${ou.ev_under}%`:"—"}{ou.kelly_under>0?` K:${ou.kelly_under}%`:""}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </Card>
+
+                        {/* Adjustments breakdown */}
+                        <SectionTitle icon="🔧">Breakdown dos Ajustes</SectionTitle>
+                        <Card>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8}}>
+                            {[
+                              {l:"Global",v:lv.adjustments.global_remaining},
+                              {l:"H2H",v:lv.adjustments.h2h_remaining,sub:`${lv.adjustments.h2h_period_games} jogos`},
+                              {l:"Contexto similar",v:lv.adjustments.context_remaining,sub:`${lv.adjustments.context_games} jogos`},
+                              {l:"FINAL",v:lv.expected_remaining_goals,accent:true},
+                            ].map((x,i)=>(
+                              <div key={i} style={{textAlign:"center",padding:10,background:x.accent?`${T.cyan}10`:"rgba(255,255,255,0.03)",borderRadius:8,border:`1px solid ${x.accent?`${T.cyan}30`:T.border}`}}>
+                                <div style={{fontSize:10,color:T.textDim,textTransform:"uppercase"}}>{x.l}</div>
+                                <div style={{fontFamily:"'JetBrains Mono'",fontSize:x.accent?22:16,fontWeight:800,color:x.accent?T.cyan:T.text}}>{x.v}</div>
+                                {x.sub&&<div style={{fontSize:10,color:T.textDim}}>{x.sub}</div>}
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:"flex",gap:10,marginTop:10,flexWrap:"wrap"}}>
+                            {[
+                              {l:"Diff placar",v:lv.adjustments.diff_adjustment,c:lv.adjustments.diff_adjustment>0?T.green:T.textDim},
+                              {l:"Perfil jogadores",v:lv.adjustments.player_adjustment,c:lv.adjustments.player_adjustment>0?T.green:lv.adjustments.player_adjustment<0?T.red:T.textDim},
+                              {l:`Horário (${lv.hour}h)`,v:lv.adjustments.hour_adjustment,c:lv.adjustments.hour_adjustment>0?T.green:lv.adjustments.hour_adjustment<0?T.red:T.textDim},
+                              {l:"Fase",v:lv.adjustments.stage_adjustment,c:lv.adjustments.stage_adjustment>0?T.green:T.textDim},
+                            ].map((x,i)=>(
+                              <div key={i} style={{padding:"4px 10px",borderRadius:6,background:"rgba(255,255,255,0.04)",fontSize:11,color:T.textMuted}}>
+                                {x.l}: <span style={{fontFamily:"'JetBrains Mono'",fontWeight:700,color:x.c}}>{x.v>0?"+":""}{x.v}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      </>);
+                    })()}
                   </>);
                 })()}
               </div>)}

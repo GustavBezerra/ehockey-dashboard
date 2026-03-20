@@ -171,52 +171,115 @@ function calcPeriodSituation(h2h) {
 }
 
 function calcComebacks(h2h) {
-  // Viradas: estava perdendo após P1 ou P2 e ganhou
-  let losingP1won = 0, losingP2won = 0, losingP1total = 0, losingP2total = 0;
-  let winningP2lost = 0, winningP2total = 0;
-  // Virada por margem
-  let comebackBy = {1:0, 2:0, 3:0};
-  let totalComebacks = 0;
+  // Análise completa de viradas no H2H
+  // Para cada jogo, rastreia a maior vantagem de cada jogador e se houve virada
   let gamesWithPeriods = 0;
+
+  // Viradas por jogador: p1 = quando P1 virou, p2 = quando P2 virou
+  const p1Comebacks = { total: 0, fromMargin: {1:0, 2:0, 3:0, "4+":0}, afterP1: 0, afterP2: 0, afterP1total: 0, afterP2total: 0 };
+  const p2Comebacks = { total: 0, fromMargin: {1:0, 2:0, 3:0, "4+":0}, afterP1: 0, afterP2: 0, afterP1total: 0, afterP2total: 0 };
+
+  // Segurança: liderava no P2 e manteve
+  const p1Security = { held: 0, lost: 0, total: 0 };
+  const p2Security = { held: 0, lost: 0, total: 0 };
+
+  // Maior virada registrada
+  let biggestComeback = { player: null, deficit: 0, final: "" };
+
+  // Detalhes de cada virada pra tabela
+  const comebackDetails = [];
 
   h2h.forEach(m => {
     const pd = parsePeriods(m);
     if (!pd || pd.periods.length < 3) return;
     gamesWithPeriods++;
 
-    const cumAfterP1_1 = pd.periods[0][0];
-    const cumAfterP1_2 = pd.periods[0][1];
-    const cumAfterP2_1 = pd.periods[0][0] + pd.periods[1][0];
-    const cumAfterP2_2 = pd.periods[0][1] + pd.periods[1][1];
-    const finalScore1 = m.p1Score;
-    const finalScore2 = m.p2Score;
-    const p1Won = finalScore1 > finalScore2;
+    const cumP1 = [0, 0, 0];
+    const cumP2 = [0, 0, 0];
+    let acc1 = 0, acc2 = 0;
 
-    // P1 estava perdendo após P1
-    if (cumAfterP1_1 < cumAfterP1_2) {
-      losingP1total++;
-      if (p1Won) { losingP1won++; totalComebacks++; const diff = finalScore1 - finalScore2; comebackBy[Math.min(diff, 3)]++; }
+    pd.periods.forEach((p, idx) => {
+      if (idx > 2) return;
+      acc1 += p[0]; acc2 += p[1];
+      cumP1[idx] = acc1; cumP2[idx] = acc2;
+    });
+
+    const final1 = m.p1Score, final2 = m.p2Score;
+    const p1Won = final1 > final2, p2Won = final2 > final1;
+
+    // Rastreia a maior desvantagem que cada jogador teve durante o jogo
+    let maxP1deficit = 0, maxP2deficit = 0;
+    for (let i = 0; i < 3; i++) {
+      const diff = cumP1[i] - cumP2[i]; // positivo = P1 na frente
+      if (diff < 0) maxP1deficit = Math.max(maxP1deficit, Math.abs(diff));
+      if (diff > 0) maxP2deficit = Math.max(maxP2deficit, diff);
     }
-    // P1 estava perdendo após P2
-    if (cumAfterP2_1 < cumAfterP2_2) {
-      losingP2total++;
-      if (p1Won) { losingP2won++; }
+
+    const diffAfterP1 = cumP1[0] - cumP2[0];
+    const diffAfterP2 = cumP1[1] - cumP2[1];
+
+    // P1 virou? (estava perdendo em algum momento e ganhou)
+    if (p1Won && maxP1deficit > 0) {
+      p1Comebacks.total++;
+      const key = maxP1deficit >= 4 ? "4+" : maxP1deficit;
+      p1Comebacks.fromMargin[key]++;
+      comebackDetails.push({
+        player: "p1", deficit: maxP1deficit,
+        final: `${final1}×${final2}`,
+        periods: pd.periods.map(p => `${p[0]}:${p[1]}`).join(" | "),
+        date: m.date,
+      });
+      if (maxP1deficit > biggestComeback.deficit) {
+        biggestComeback = { player: "p1", deficit: maxP1deficit, final: `${final1}×${final2}` };
+      }
     }
-    // P1 estava ganhando após P2 mas perdeu
-    if (cumAfterP2_1 > cumAfterP2_2) {
-      winningP2total++;
-      if (!p1Won && finalScore1 !== finalScore2) winningP2lost++;
+
+    // P2 virou?
+    if (p2Won && maxP2deficit > 0) {
+      p2Comebacks.total++;
+      const key = maxP2deficit >= 4 ? "4+" : maxP2deficit;
+      p2Comebacks.fromMargin[key]++;
+      comebackDetails.push({
+        player: "p2", deficit: maxP2deficit,
+        final: `${final1}×${final2}`,
+        periods: pd.periods.map(p => `${p[0]}:${p[1]}`).join(" | "),
+        date: m.date,
+      });
+      if (maxP2deficit > biggestComeback.deficit) {
+        biggestComeback = { player: "p2", deficit: maxP2deficit, final: `${final1}×${final2}` };
+      }
+    }
+
+    // Viradas após P1 específico
+    if (diffAfterP1 < 0) { p1Comebacks.afterP1total++; if (p1Won) p1Comebacks.afterP1++; }
+    if (diffAfterP1 > 0) { p2Comebacks.afterP1total++; if (p2Won) p2Comebacks.afterP1++; }
+
+    // Viradas após P2 específico
+    if (diffAfterP2 < 0) { p1Comebacks.afterP2total++; if (p1Won) p1Comebacks.afterP2++; }
+    if (diffAfterP2 > 0) { p2Comebacks.afterP2total++; if (p2Won) p2Comebacks.afterP2++; }
+
+    // Segurança: liderava após P2
+    if (diffAfterP2 > 0) {
+      p1Security.total++;
+      if (p1Won) p1Security.held++;
+      else p1Security.lost++;
+    }
+    if (diffAfterP2 < 0) {
+      p2Security.total++;
+      if (p2Won) p2Security.held++;
+      else p2Security.lost++;
     }
   });
 
+  // Ordena detalhes por deficit (maior primeiro)
+  comebackDetails.sort((a, b) => b.deficit - a.deficit);
+
   return {
     gamesWithPeriods,
-    losingP1: { won: losingP1won, total: losingP1total, pct: losingP1total ? (losingP1won / losingP1total) * 100 : 0 },
-    losingP2: { won: losingP2won, total: losingP2total, pct: losingP2total ? (losingP2won / losingP2total) * 100 : 0 },
-    blownLead: { lost: winningP2lost, total: winningP2total, pct: winningP2total ? (winningP2lost / winningP2total) * 100 : 0 },
-    security: { pct: winningP2total ? ((winningP2total - winningP2lost) / winningP2total) * 100 : 0 },
-    comebackBy,
-    totalComebacks,
+    p1: p1Comebacks, p2: p2Comebacks,
+    p1Security, p2Security,
+    biggestComeback,
+    details: comebackDetails.slice(0, 10), // top 10 viradas
   };
 }
 
@@ -336,6 +399,17 @@ export default function App() {
   const [kellyBankroll,setKellyBankroll]=useState("1000");
   const [kellyTarget,setKellyTarget]=useState("p1_ml");
 
+  // Predict inputs
+  const [predOddsP1,setPredOddsP1]=useState("");
+  const [predOddsP2,setPredOddsP2]=useState("");
+  const [predOddsO55,setPredOddsO55]=useState("");
+  const [predOddsU55,setPredOddsU55]=useState("");
+  const [predOddsO65,setPredOddsO65]=useState("");
+  const [predOddsU65,setPredOddsU65]=useState("");
+  const [predOddsO75,setPredOddsO75]=useState("");
+  const [predOddsU75,setPredOddsU75]=useState("");
+  const predFetch=useFetch();
+
   // Time patterns
   const tp1=useFetch();
   const tp2=useFetch();
@@ -343,6 +417,7 @@ export default function App() {
   useEffect(()=>{if(players&&players.length>=2&&!p1&&!p2){setP1(players[0]);setP2(players[1]);}},[players]);
   useEffect(()=>{if(p1)tp1.load(`/time-patterns?player=${encodeURIComponent(p1)}`);}, [p1]);
   useEffect(()=>{if(p2)tp2.load(`/time-patterns?player=${encodeURIComponent(p2)}`);}, [p2]);
+  useEffect(()=>{if(p1&&p2&&p1!==p2)predFetch.load(`/predict?p1=${encodeURIComponent(p1)}&p2=${encodeURIComponent(p2)}`);}, [p1,p2]);
 
   const matches=useMemo(()=>allMatches||[],[allMatches]);
   const filteredMatches=useMemo(()=>{
@@ -406,7 +481,7 @@ export default function App() {
 
   const selSt={background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",color:T.text,fontFamily:"'Outfit'",fontSize:14,fontWeight:600,outline:"none",cursor:"pointer",width:"100%",appearance:"none",WebkitAppearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center"};
 
-  const tabs=[["geral","📊 Geral"],["periodos","⏱️ Períodos"],["padroes","🔬 Padrões"],["forma","🔥 Forma"],["ou","📈 O/U"],["kelly","💰 Simulador"],["elo","🏆 ELO"],["tempo","🕐 Horários"],["confrontos","📋 H2H"]];
+  const tabs=[["geral","📊 Geral"],["periodos","⏱️ Períodos"],["padroes","🔬 Padrões"],["forma","🔥 Forma"],["ou","📈 O/U"],["predict","🎯 Predição"],["kelly","💰 Simulador"],["elo","🏆 ELO"],["tempo","🕐 Horários"],["confrontos","📋 H2H"]];
 
   return(
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Outfit', sans-serif"}}>
@@ -501,13 +576,13 @@ export default function App() {
               </label>
             </div>
 
-            {h2hAll.length===0&&tab!=="elo"&&tab!=="tempo"&&tab!=="padroes"?(<Card><div style={{textAlign:"center",padding:40,color:T.textMuted}}>Sem H2H entre {p1} e {p2}{stageFilter?` na fase "${stageFilter}"`:""}</div></Card>)
+            {h2hAll.length===0&&tab!=="elo"&&tab!=="tempo"&&tab!=="padroes"&&tab!=="predict"?(<Card><div style={{textAlign:"center",padding:40,color:T.textMuted}}>Sem H2H entre {p1} e {p2}{stageFilter?` na fase "${stageFilter}"`:""}</div></Card>)
             :(<>
               {/* ═══ GERAL ═══ */}
               {tab==="geral"&&(<div className="fade-up fade-d2">
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                  <KpiCard label={`${p1} ML`} value={fmtPct(summary.p1WR)} color={pctColor(summary.p1WR)} sub={`Odd ideal: <b style="color:${T.text}">${fmtNum(idealOdd(summary.p1WR))}</b>`}/>
-                  <KpiCard label={`${p2} ML`} value={fmtPct(summary.p2WR)} color={pctColor(summary.p2WR)} sub={`Odd ideal: <b style="color:${T.text}">${fmtNum(idealOdd(summary.p2WR))}</b>`}/>
+                  <KpiCard label={`${p1} ML`} value={fmtPct(summary.p1WR)} color={pctColor(summary.p1WR)} sub={`H2H: <b style="color:${T.text}">${fmtNum(idealOdd(summary.p1WR))}</b>${predFetch.data?` | Bayes: <b style="color:${T.cyan}">${predFetch.data.moneyline.fair_p1}</b>`:""}`}/>
+                  <KpiCard label={`${p2} ML`} value={fmtPct(summary.p2WR)} color={pctColor(summary.p2WR)} sub={`H2H: <b style="color:${T.text}">${fmtNum(idealOdd(summary.p2WR))}</b>${predFetch.data?` | Bayes: <b style="color:${T.cyan}">${predFetch.data.moneyline.fair_p2}</b>`:""}`}/>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:4}}>
                   <KpiCard label="Jogos" value={String(summary.total)} small/>
@@ -593,34 +668,116 @@ export default function App() {
                   </div>
                 </Card>
 
-                {/* Viradas e Comebacks */}
-                <SectionTitle icon="🔄">Viradas e Comebacks ({p1})</SectionTitle>
+                {/* Viradas e Comebacks H2H */}
+                <SectionTitle icon="🔄">Viradas no Confronto</SectionTitle>
                 {comebacks.gamesWithPeriods>0?(<>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:16}}>
-                    <KpiCard label="Perdendo no P1 → Virou" value={fmtPct(comebacks.losingP1.pct)} color={comebacks.losingP1.pct>30?T.green:T.red} small
-                      sub={`${comebacks.losingP1.won} de ${comebacks.losingP1.total}`}/>
-                    <KpiCard label="Perdendo no P2 → Virou" value={fmtPct(comebacks.losingP2.pct)} color={comebacks.losingP2.pct>20?T.green:T.red} small
-                      sub={`${comebacks.losingP2.won} de ${comebacks.losingP2.total}`}/>
-                    <KpiCard label="Segurança (ganhou P2 → manteve)" value={fmtPct(comebacks.security.pct)} color={comebacks.security.pct>70?T.green:T.yellow} small
-                      sub={`${comebacks.blownLead.total-comebacks.blownLead.lost} de ${comebacks.blownLead.total}`}/>
-                    <KpiCard label="Tomou virada (P2 ganhando → perdeu)" value={fmtPct(comebacks.blownLead.pct)} color={comebacks.blownLead.pct<20?T.green:T.red} small
-                      sub={`${comebacks.blownLead.lost} de ${comebacks.blownLead.total}`}/>
+                  {/* Resumo geral */}
+                  <Card style={{marginBottom:16}}>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>
+                      De {comebacks.gamesWithPeriods} jogos com dados de período, quantas vezes cada jogador virou quando estava perdendo.
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                      {/* P1 */}
+                      <div style={{padding:16,background:`${T.accent1}08`,borderRadius:12,border:`1px solid ${T.accent1}20`}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.accent1,marginBottom:12}}>{p1}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Total de viradas</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:T.text}}>{comebacks.p1.total}</span>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Perdendo no P1 → virou</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:700,color:comebacks.p1.afterP1total?pctColor((comebacks.p1.afterP1/comebacks.p1.afterP1total)*100):T.textMuted}}>
+                            {comebacks.p1.afterP1}/{comebacks.p1.afterP1total} {comebacks.p1.afterP1total?`(${fmtPct((comebacks.p1.afterP1/comebacks.p1.afterP1total)*100)})`:""}</span>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between"}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Perdendo no P2 → virou</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:700,color:comebacks.p1.afterP2total?pctColor((comebacks.p1.afterP2/comebacks.p1.afterP2total)*100):T.textMuted}}>
+                            {comebacks.p1.afterP2}/{comebacks.p1.afterP2total} {comebacks.p1.afterP2total?`(${fmtPct((comebacks.p1.afterP2/comebacks.p1.afterP2total)*100)})`:""}</span>
+                        </div>
+                      </div>
+                      {/* P2 */}
+                      <div style={{padding:16,background:`${T.accent2}08`,borderRadius:12,border:`1px solid ${T.accent2}20`}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.accent2,marginBottom:12}}>{p2}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Total de viradas</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:T.text}}>{comebacks.p2.total}</span>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Perdendo no P1 → virou</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:700,color:comebacks.p2.afterP1total?pctColor((comebacks.p2.afterP1/comebacks.p2.afterP1total)*100):T.textMuted}}>
+                            {comebacks.p2.afterP1}/{comebacks.p2.afterP1total} {comebacks.p2.afterP1total?`(${fmtPct((comebacks.p2.afterP1/comebacks.p2.afterP1total)*100)})`:""}</span>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between"}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Perdendo no P2 → virou</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:700,color:comebacks.p2.afterP2total?pctColor((comebacks.p2.afterP2/comebacks.p2.afterP2total)*100):T.textMuted}}>
+                            {comebacks.p2.afterP2}/{comebacks.p2.afterP2total} {comebacks.p2.afterP2total?`(${fmtPct((comebacks.p2.afterP2/comebacks.p2.afterP2total)*100)})`:""}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Viradas por margem de gols */}
+                  <SectionTitle icon="📊">Viradas por Margem de Desvantagem</SectionTitle>
+                  <Card style={{marginBottom:16}}>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>
+                      Quantas vezes cada jogador virou quando estava perdendo por 1, 2, 3 ou 4+ gols.
+                    </div>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead><tr>
+                        {["Desvantagem",`${p1} virou`,`${p2} virou`,"Total viradas"].map((h,i)=><th key={i} style={{textAlign:i===0?"left":"center",padding:"10px 8px",fontSize:11,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMuted,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {[{label:"Perdendo por 1",key:1},{label:"Perdendo por 2",key:2},{label:"Perdendo por 3",key:3},{label:"Perdendo por 4+",key:"4+"}].map((row,i)=>(
+                          <tr key={i} style={{borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                            <td style={{padding:"10px 8px",fontWeight:600,fontSize:13}}>{row.label}</td>
+                            <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:800,fontSize:16,color:comebacks.p1.fromMargin[row.key]>0?T.accent1:T.textDim}}>{comebacks.p1.fromMargin[row.key]}</td>
+                            <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:800,fontSize:16,color:comebacks.p2.fromMargin[row.key]>0?T.accent2:T.textDim}}>{comebacks.p2.fromMargin[row.key]}</td>
+                            <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:700,fontSize:14,color:T.textMuted}}>{comebacks.p1.fromMargin[row.key]+comebacks.p2.fromMargin[row.key]}</td>
+                          </tr>
+                        ))}
+                        <tr style={{borderTop:`2px solid ${T.border}`}}>
+                          <td style={{padding:"10px 8px",fontWeight:700,fontSize:13}}>Total</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:800,fontSize:18,color:T.accent1}}>{comebacks.p1.total}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:800,fontSize:18,color:T.accent2}}>{comebacks.p2.total}</td>
+                          <td style={{padding:"10px 8px",textAlign:"center",fontFamily:"'JetBrains Mono'",fontWeight:800,fontSize:16,color:T.text}}>{comebacks.p1.total+comebacks.p2.total}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </Card>
+
+                  {/* Segurança */}
+                  <SectionTitle icon="🛡️">Segurança (Ganhando no P2 → Manteve?)</SectionTitle>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                    <Card>
+                      <div style={{fontSize:11,fontWeight:600,color:T.accent1,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>{p1}</div>
+                      <div style={{fontFamily:"'JetBrains Mono'",fontSize:32,fontWeight:800,color:comebacks.p1Security.total?pctColor((comebacks.p1Security.held/comebacks.p1Security.total)*100):T.textMuted}}>
+                        {comebacks.p1Security.total?fmtPct((comebacks.p1Security.held/comebacks.p1Security.total)*100):"—"}</div>
+                      <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>Manteve {comebacks.p1Security.held} de {comebacks.p1Security.total} | Perdeu {comebacks.p1Security.lost}</div>
+                    </Card>
+                    <Card>
+                      <div style={{fontSize:11,fontWeight:600,color:T.accent2,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>{p2}</div>
+                      <div style={{fontFamily:"'JetBrains Mono'",fontSize:32,fontWeight:800,color:comebacks.p2Security.total?pctColor((comebacks.p2Security.held/comebacks.p2Security.total)*100):T.textMuted}}>
+                        {comebacks.p2Security.total?fmtPct((comebacks.p2Security.held/comebacks.p2Security.total)*100):"—"}</div>
+                      <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>Manteve {comebacks.p2Security.held} de {comebacks.p2Security.total} | Perdeu {comebacks.p2Security.lost}</div>
+                    </Card>
                   </div>
 
-                  {/* Same for P2 player */}
-                  {(()=>{
-                    const cb2 = calcComebacks(h2h.map(m=>({...m, p1Score:m.p2Score, p2Score:m.p1Score, period_scores:m.period_scores?
-                      (Array.isArray(m.period_scores)?m.period_scores.map(p=>[p[1],p[0]]):{...m.period_scores,periods:(m.period_scores.periods||[]).map(p=>[p[1],p[0]]),overtime:(m.period_scores.overtime||[]).map(p=>[p[1],p[0]])}):null})));
-                    return(<>
-                      <div style={{fontSize:13,fontWeight:700,color:T.accent2,marginBottom:10}}>Viradas de {p2}</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:16}}>
-                        <KpiCard label="Perdendo no P1 → Virou" value={fmtPct(cb2.losingP1.pct)} color={cb2.losingP1.pct>30?T.green:T.red} small sub={`${cb2.losingP1.won} de ${cb2.losingP1.total}`}/>
-                        <KpiCard label="Perdendo no P2 → Virou" value={fmtPct(cb2.losingP2.pct)} color={cb2.losingP2.pct>20?T.green:T.red} small sub={`${cb2.losingP2.won} de ${cb2.losingP2.total}`}/>
-                        <KpiCard label="Segurança" value={fmtPct(cb2.security.pct)} color={cb2.security.pct>70?T.green:T.yellow} small sub={`${cb2.blownLead.total-cb2.blownLead.lost} de ${cb2.blownLead.total}`}/>
-                        <KpiCard label="Tomou virada" value={fmtPct(cb2.blownLead.pct)} color={cb2.blownLead.pct<20?T.green:T.red} small sub={`${cb2.blownLead.lost} de ${cb2.blownLead.total}`}/>
-                      </div>
-                    </>);
-                  })()}
+                  {/* Maiores viradas */}
+                  {comebacks.details.length>0&&(<>
+                    <SectionTitle icon="🏆">Maiores Viradas do Confronto</SectionTitle>
+                    <Card style={{padding:"8px 12px"}}>
+                      {comebacks.details.slice(0,5).map((d,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 4px",borderBottom:i<4?`1px solid ${T.border}`:"none"}}>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:11,color:T.textDim,width:72,flexShrink:0}}>{d.date?.split("T")[0]}</span>
+                          <Pill text={`-${d.deficit}`} color={T.red} bg={`${T.red}18`}/>
+                          <span style={{fontSize:12,color:d.player==="p1"?T.accent1:T.accent2,fontWeight:700}}>{d.player==="p1"?p1:p2} virou</span>
+                          <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:800,color:T.text}}>{d.final}</span>
+                          <span style={{fontSize:11,color:T.textDim,marginLeft:"auto"}}>{d.periods}</span>
+                        </div>
+                      ))}
+                    </Card>
+                  </>)}
+
                 </>):(<Card><div style={{textAlign:"center",padding:20,color:T.textMuted}}>Sem dados de período suficientes.</div></Card>)}
 
                 {/* Gols por Período */}
@@ -857,6 +1014,167 @@ export default function App() {
               </div>)}
 
               {/* ═══ KELLY SIMULATOR ═══ */}
+              {/* ═══ PREDIÇÃO ═══ */}
+              {tab==="predict"&&(<div className="fade-up fade-d2">
+                {(()=>{
+                  const pred=predFetch.data;
+                  const loading=predFetch.loading;
+
+                  const runPredict=()=>{
+                    let url=`/predict?p1=${encodeURIComponent(p1)}&p2=${encodeURIComponent(p2)}`;
+                    if(predOddsP1)url+=`&odds_p1=${predOddsP1}`;
+                    if(predOddsP2)url+=`&odds_p2=${predOddsP2}`;
+                    if(predOddsO55)url+=`&odds_over55=${predOddsO55}`;
+                    if(predOddsU55)url+=`&odds_under55=${predOddsU55}`;
+                    if(predOddsO65)url+=`&odds_over65=${predOddsO65}`;
+                    if(predOddsU65)url+=`&odds_under65=${predOddsU65}`;
+                    if(predOddsO75)url+=`&odds_over75=${predOddsO75}`;
+                    if(predOddsU75)url+=`&odds_under75=${predOddsU75}`;
+                    predFetch.load(url);
+                  };
+
+                  return(<>
+                    {/* Odds input */}
+                    <SectionTitle icon="🎰">Odds da Casa</SectionTitle>
+                    <Card style={{marginBottom:16}}>
+                      <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Insira as odds da casa de apostas pra calcular EV e Kelly. Deixe em branco os mercados sem odd.</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                        <InputField label={`ML ${p1}`} value={predOddsP1} onChange={setPredOddsP1} placeholder="Ex: 1.85"/>
+                        <InputField label={`ML ${p2}`} value={predOddsP2} onChange={setPredOddsP2} placeholder="Ex: 1.95"/>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                        <InputField label="O 5.5" value={predOddsO55} onChange={setPredOddsO55} placeholder="1.70"/>
+                        <InputField label="U 5.5" value={predOddsU55} onChange={setPredOddsU55} placeholder="2.10"/>
+                        <InputField label="O 6.5" value={predOddsO65} onChange={setPredOddsO65} placeholder="1.45"/>
+                        <InputField label="U 6.5" value={predOddsU65} onChange={setPredOddsU65} placeholder="2.75"/>
+                        <InputField label="O 7.5" value={predOddsO75} onChange={setPredOddsO75} placeholder="1.90"/>
+                        <InputField label="U 7.5" value={predOddsU75} onChange={setPredOddsU75} placeholder="1.90"/>
+                      </div>
+                      <button onClick={runPredict} style={{background:`linear-gradient(135deg, ${T.accent1}, ${T.accent2})`,color:"#fff",border:"none",borderRadius:10,padding:"12px 32px",fontFamily:"'Outfit'",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%"}}>
+                        {loading?"Calculando...":"🎯 Calcular Predição"}
+                      </button>
+                    </Card>
+
+                    {pred&&(<>
+                      {/* Info */}
+                      <Card style={{marginBottom:16,padding:"12px 16px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>Conferência: <b style={{color:T.text}}>{pred.conference||"?"}</b></span>
+                          <span style={{fontSize:12,color:T.textMuted}}>H2H: <b style={{color:T.text}}>{pred.h2h_games} jogos</b></span>
+                          <span style={{fontSize:12,color:T.textMuted}}>Peso Bayesiano: H2H <b style={{color:T.cyan}}>{pred.h2h_weight}%</b> / Global <b>{(100-pred.h2h_weight).toFixed(1)}%</b></span>
+                        </div>
+                      </Card>
+
+                      {/* Moneyline */}
+                      <SectionTitle icon="🎯">Moneyline</SectionTitle>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                        <Card>
+                          <div style={{fontSize:11,fontWeight:600,color:T.accent1,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>{p1}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:36,fontWeight:800,color:pred.moneyline.p1_prob>50?T.green:T.red}}>{pred.moneyline.p1_prob}%</div>
+                          <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>Fair @ {pred.moneyline.fair_p1} | ELO {pred.moneyline.elo}%</div>
+                          {pred.moneyline.ev_p1!=null&&(<div style={{marginTop:8,padding:"6px 10px",borderRadius:8,background:pred.moneyline.ev_p1>0?`${T.green}15`:`${T.red}15`,border:`1px solid ${pred.moneyline.ev_p1>0?T.green:T.red}30`}}>
+                            <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:800,color:pred.moneyline.ev_p1>0?T.green:T.red}}>EV {pred.moneyline.ev_p1>0?"+":""}{pred.moneyline.ev_p1}%</span>
+                            {pred.moneyline.kelly_p1>0&&<span style={{fontSize:12,color:T.textMuted,marginLeft:8}}>Kelly {pred.moneyline.kelly_p1}%</span>}
+                          </div>)}
+                        </Card>
+                        <Card>
+                          <div style={{fontSize:11,fontWeight:600,color:T.accent2,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>{p2}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:36,fontWeight:800,color:pred.moneyline.p2_prob>50?T.green:T.red}}>{pred.moneyline.p2_prob}%</div>
+                          <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>Fair @ {pred.moneyline.fair_p2} | ELO {(100-pred.moneyline.elo).toFixed(1)}%</div>
+                          {pred.moneyline.ev_p2!=null&&(<div style={{marginTop:8,padding:"6px 10px",borderRadius:8,background:pred.moneyline.ev_p2>0?`${T.green}15`:`${T.red}15`,border:`1px solid ${pred.moneyline.ev_p2>0?T.green:T.red}30`}}>
+                            <span style={{fontFamily:"'JetBrains Mono'",fontSize:14,fontWeight:800,color:pred.moneyline.ev_p2>0?T.green:T.red}}>EV {pred.moneyline.ev_p2>0?"+":""}{pred.moneyline.ev_p2}%</span>
+                            {pred.moneyline.kelly_p2>0&&<span style={{fontSize:12,color:T.textMuted,marginLeft:8}}>Kelly {pred.moneyline.kelly_p2}%</span>}
+                          </div>)}
+                        </Card>
+                      </div>
+
+                      {/* Value Alert */}
+                      {pred.moneyline.value&&(<Card style={{marginBottom:16,background:`${T.green}08`,border:`1px solid ${T.green}25`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <span style={{fontSize:24}}>✅</span>
+                          <div>
+                            <div style={{fontSize:16,fontWeight:800,color:T.green}}>VALUE BET: {pred.moneyline.value} ML</div>
+                            <div style={{fontSize:12,color:T.textMuted}}>
+                              EV {pred.moneyline.value===p1?(pred.moneyline.ev_p1>0?"+":"")+pred.moneyline.ev_p1:(pred.moneyline.ev_p2>0?"+":"")+pred.moneyline.ev_p2}%
+                              {" | "}Kelly {pred.moneyline.value===p1?pred.moneyline.kelly_p1:pred.moneyline.kelly_p2}%
+                            </div>
+                          </div>
+                        </div>
+                      </Card>)}
+
+                      {/* Total esperado */}
+                      <SectionTitle icon="📈">Total de Gols Esperado</SectionTitle>
+                      <Card style={{marginBottom:16}}>
+                        <div style={{display:"flex",gap:16,marginBottom:12}}>
+                          {[{l:"Global",v:pred.total_expected.global},{l:"H2H",v:pred.total_expected.h2h},{l:"Conf",v:pred.total_expected.conf},{l:"BAYESIAN",v:pred.total_expected.bayesian,accent:true}].filter(x=>x.v!=null).map((x,i)=>(
+                            <div key={i} style={{flex:1,textAlign:"center",padding:"10px 0",background:x.accent?`${T.cyan}10`:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${x.accent?`${T.cyan}30`:T.border}`}}>
+                              <div style={{fontSize:10,color:T.textDim,textTransform:"uppercase",fontWeight:600}}>{x.l}</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:x.accent?28:20,fontWeight:800,color:x.accent?T.cyan:T.text}}>{x.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+
+                      {/* Over/Under */}
+                      <SectionTitle icon="📊">Over/Under</SectionTitle>
+                      <Card style={{marginBottom:16}}>
+                        <table style={{width:"100%",borderCollapse:"collapse"}}>
+                          <thead><tr>
+                            {["Linha","Lado","Prob Over","Prob Under","Fair Over","Fair Under","EV Over","EV Under"].map((h,i)=><th key={i} style={{textAlign:i<2?"left":"right",padding:"10px 6px",fontSize:10,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMuted,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>
+                            {pred.over_under.map((ou,i)=>(
+                              <tr key={i} style={{borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                                <td style={{padding:"10px 6px",fontWeight:700,fontSize:14}}>O/U {ou.line}</td>
+                                <td style={{padding:"10px 6px",fontWeight:700,fontSize:13,color:ou.side==="OVER"?T.green:ou.side==="UNDER"?T.red:T.yellow}}>{ou.side}</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.prob_over>55?T.green:T.textMuted}}>{ou.prob_over}%</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.prob_under>55?T.green:T.textMuted}}>{ou.prob_under}%</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:12,color:T.text}}>@ {ou.fair_over}</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:12,color:T.text}}>@ {ou.fair_under}</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.ev_over!=null?(ou.ev_over>0?T.green:T.red):T.textDim}}>{ou.ev_over!=null?`${ou.ev_over>0?"+":""}${ou.ev_over}%`:"—"}</td>
+                                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:700,color:ou.ev_under!=null?(ou.ev_under>0?T.green:T.red):T.textDim}}>{ou.ev_under!=null?`${ou.ev_under>0?"+":""}${ou.ev_under}%`:"—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </Card>
+
+                      {/* Períodos */}
+                      <SectionTitle icon="⏱️">Gols por Período (Bayesian)</SectionTitle>
+                      <Card style={{marginBottom:16}}>
+                        <div style={{display:"flex",gap:12}}>
+                          {pred.periods.map((per,i)=>(
+                            <div key={i} style={{flex:1,textAlign:"center",padding:12,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${T.border}`}}>
+                              <div style={{fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:4}}>{per.period}</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:28,fontWeight:800,color:T.cyan}}>{per.bayesian}</div>
+                              <div style={{fontSize:10,color:T.textDim,marginTop:4}}>
+                                G:{per.global} {per.h2h!=null?`H:${per.h2h}`:""} {per.conf!=null?`C:${per.conf}`:""}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+
+                      {/* Handicap */}
+                      <SectionTitle icon="🧮">Handicap</SectionTitle>
+                      <Card>
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                          {pred.handicap.map((h,i)=>(
+                            <div key={i} style={{textAlign:"center",padding:12,background:"rgba(255,255,255,0.03)",borderRadius:10,border:`1px solid ${T.border}`}}>
+                              <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:6}}>{h.label}</div>
+                              <div style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:pctColor(h.prob)}}>{h.prob}%</div>
+                              <div style={{fontSize:11,color:T.textDim,marginTop:4}}>Fair @ {h.fair}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    </>)}
+
+                    {!pred&&!loading&&(<Card><div style={{textAlign:"center",padding:30,color:T.textMuted}}>Selecione dois jogadores e clique "Calcular Predição"</div></Card>)}
+                  </>);
+                })()}
+              </div>)}
+
               {tab==="kelly"&&(<div className="fade-up fade-d2">
                 <SectionTitle icon="💰">Simulador de Apostas (Kelly)</SectionTitle>
                 <Card style={{marginBottom:16}}>

@@ -493,7 +493,7 @@ export default function App() {
 
   const selSt={background:T.surface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",color:T.text,fontFamily:"'Outfit'",fontSize:14,fontWeight:600,outline:"none",cursor:"pointer",width:"100%",appearance:"none",WebkitAppearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center"};
 
-  const tabs=[["geral","📊 Geral"],["periodos","⏱️ Períodos"],["padroes","🔬 Padrões"],["forma","🔥 Forma"],["ou","📈 O/U"],["predict","🎯 Predição"],["kelly","💰 Simulador"],["elo","🏆 ELO"],["tempo","🕐 Horários"],["confrontos","📋 H2H"]];
+  const tabs=[["geral","📊 Geral"],["periodos","⏱️ Períodos"],["padroes","🔬 Padrões"],["forma","🔥 Forma"],["ou","📈 O/U"],["predict","🎯 Predição"],["poisson","🎲 Poisson"],["kelly","💰 Simulador"],["elo","🏆 ELO"],["tempo","🕐 Horários"],["confrontos","📋 H2H"]];
 
   return(
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Outfit', sans-serif"}}>
@@ -588,7 +588,7 @@ export default function App() {
               </label>
             </div>
 
-            {h2hAll.length===0&&tab!=="elo"&&tab!=="tempo"&&tab!=="padroes"&&tab!=="predict"?(<Card><div style={{textAlign:"center",padding:40,color:T.textMuted}}>Sem H2H entre {p1} e {p2}{stageFilter?` na fase "${stageFilter}"`:""}</div></Card>)
+            {h2hAll.length===0&&tab!=="elo"&&tab!=="tempo"&&tab!=="padroes"&&tab!=="predict"&&tab!=="poisson"?(<Card><div style={{textAlign:"center",padding:40,color:T.textMuted}}>Sem H2H entre {p1} e {p2}{stageFilter?` na fase "${stageFilter}"`:""}</div></Card>)
             :(<>
               {/* ═══ GERAL ═══ */}
               {tab==="geral"&&(<div className="fade-up fade-d2">
@@ -1329,6 +1329,108 @@ export default function App() {
                         </Card>
                       </>);
                     })()}
+                  </>);
+                })()}
+              </div>)}
+
+              {/* ═══ POISSON ═══ */}
+              {tab==="poisson"&&(<div className="fade-up fade-d2">
+                {(()=>{
+                  const pred=predFetch.data;
+                  const poi=pred?.poisson;
+                  if(!poi) return(<Card><div style={{textAlign:"center",padding:30,color:T.textMuted}}>Carregando modelo Poisson... Aguarde ou selecione dois jogadores.</div></Card>);
+
+                  return(<>
+                    {/* Lambdas */}
+                    <SectionTitle icon="🎯">Modelo de Poisson — Gols Esperados</SectionTitle>
+                    <Card style={{marginBottom:16}}>
+                      <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>
+                        Lambda = taxa de gols esperada por jogo. Calculado via Ataque × Defesa do oponente, ajustado por H2H e conferência (Bayesian).
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:16,alignItems:"center"}}>
+                        <div style={{textAlign:"center",padding:16,background:`${T.accent1}08`,borderRadius:12,border:`1px solid ${T.accent1}20`}}>
+                          <div style={{fontSize:11,fontWeight:600,color:T.accent1,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>{p1}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:42,fontWeight:800,color:T.text}}>{poi.lambda_p1}</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>gols esperados</div>
+                          {pred.players&&<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Atq: {pred.players.p1.avg_gf} | Def: {pred.players.p1.avg_ga}</div>}
+                        </div>
+                        <div style={{fontSize:20,color:T.textDim,fontWeight:800}}>vs</div>
+                        <div style={{textAlign:"center",padding:16,background:`${T.accent2}08`,borderRadius:12,border:`1px solid ${T.accent2}20`}}>
+                          <div style={{fontSize:11,fontWeight:600,color:T.accent2,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>{p2}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:42,fontWeight:800,color:T.text}}>{poi.lambda_p2}</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>gols esperados</div>
+                          {pred.players&&<div style={{fontSize:10,color:T.textDim,marginTop:4}}>Atq: {pred.players.p2.avg_gf} | Def: {pred.players.p2.avg_ga}</div>}
+                        </div>
+                      </div>
+                      <div style={{textAlign:"center",marginTop:12,padding:10,background:`${T.cyan}08`,borderRadius:8,border:`1px solid ${T.cyan}20`}}>
+                        <span style={{fontSize:11,color:T.textDim}}>Total esperado (Poisson): </span>
+                        <span style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:T.cyan}}>{poi.expected_total}</span>
+                      </div>
+                    </Card>
+
+                    {/* Moneyline Poisson */}
+                    <SectionTitle icon="🏒">Moneyline (Poisson)</SectionTitle>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+                      {[{l:p1,v:poi.p1_win,c:T.accent1},{l:"Empate",v:poi.draw,c:T.yellow},{l:p2,v:poi.p2_win,c:T.accent2}].map((x,i)=>(
+                        <Card key={i} style={{textAlign:"center"}}>
+                          <div style={{fontSize:11,fontWeight:600,color:x.c,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:4}}>{x.l}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:28,fontWeight:800,color:x.v>40?T.green:x.v>20?T.text:T.textDim}}>{x.v}%</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>Fair @ {x.v>0.5?fmtNum(100/x.v):"—"}</div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* O/U Poisson */}
+                    <SectionTitle icon="📊">Over/Under (Poisson)</SectionTitle>
+                    <Card style={{marginBottom:16}}>
+                      <table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead><tr>
+                          {["Linha","Over %","Under %","Fair Over","Fair Under"].map((h,i)=><th key={i} style={{textAlign:i===0?"left":"right",padding:"10px 8px",fontSize:10,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textMuted,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {Object.entries(poi.over_under).map(([line,data],i)=>(
+                            <tr key={i} style={{borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                              <td style={{padding:"10px 8px",fontWeight:700,fontSize:14}}>O/U {line}</td>
+                              <td style={{padding:"10px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:800,color:data.over>55?T.green:T.textMuted}}>{data.over}%</td>
+                              <td style={{padding:"10px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontWeight:800,color:data.under>55?T.green:T.textMuted}}>{data.under}%</td>
+                              <td style={{padding:"10px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:12,color:T.text}}>@ {data.fair_over}</td>
+                              <td style={{padding:"10px 8px",textAlign:"right",fontFamily:"'JetBrains Mono'",fontSize:12,color:T.text}}>@ {data.fair_under}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </Card>
+
+                    {/* Handicap Poisson */}
+                    <SectionTitle icon="🧮">Handicap (Poisson)</SectionTitle>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+                      {Object.entries(poi.handicap).map(([hcap,data],i)=>(
+                        <Card key={i} style={{textAlign:"center",padding:12}}>
+                          <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:6}}>{p1} {hcap>0?"+":""}{hcap}</div>
+                          <div style={{fontFamily:"'JetBrains Mono'",fontSize:22,fontWeight:800,color:pctColor(data.prob)}}>{data.prob}%</div>
+                          <div style={{fontSize:11,color:T.textDim,marginTop:4}}>Fair @ {data.fair}</div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Correct Scores */}
+                    <SectionTitle icon="🎯">Placares Exatos Mais Prováveis</SectionTitle>
+                    <Card>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {poi.correct_scores.map((cs,i)=>(
+                          <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,
+                            background:i===0?`${T.cyan}12`:i<3?`${T.green}08`:"rgba(255,255,255,0.03)",
+                            border:`1px solid ${i===0?`${T.cyan}30`:i<3?`${T.green}20`:T.border}`,
+                            borderRadius:12,padding:"12px 16px",minWidth:80}}>
+                            <span style={{fontFamily:"'JetBrains Mono'",fontSize:20,fontWeight:800,color:i===0?T.cyan:i<3?T.green:T.text}}>
+                              {cs.score.replace("×"," × ")}
+                            </span>
+                            <span style={{fontSize:12,color:T.textMuted,fontWeight:600}}>{cs.prob}%</span>
+                            <span style={{fontSize:10,color:T.textDim}}>@ {cs.fair}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
                   </>);
                 })()}
               </div>)}
